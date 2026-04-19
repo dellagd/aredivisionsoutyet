@@ -1,0 +1,48 @@
+name: Check Divisions
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch division teams
+        id: fetch
+        env:
+          TBA_KEY: ${{ secrets.TBA_API_KEY }}
+        run: |
+          RESPONSE=$(curl -sf "https://www.thebluealliance.com/api/v3/event/2026new/teams/simple" \
+            -H "X-TBA-Auth-Key: $TBA_KEY")
+          COUNT=$(echo "$RESPONSE" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d))" 2>/dev/null || echo "0")
+          echo "count=$COUNT" >> $GITHUB_OUTPUT
+
+      - name: Update page to yes
+        if: steps.fetch.outputs.count > 0
+        run: |
+          cat > index.html << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="refresh" content="2;url=https://frc.divisions.co/">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DIVISIONS</title>
+</head>
+<body>
+  <p>yes.</p>
+</body>
+</html>
+EOF
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git diff --quiet index.html || (git add index.html && git commit -m "Divisions are out" && git push)
